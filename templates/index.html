@@ -1,0 +1,789 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MindPilot - 认知图谱平台</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <style>
+        :root {
+            --primary-color: #7C3AED;
+            --secondary-color: #5B21B6;
+            --accent-color: #C4B5FD;
+            --background-color: #F9FAFB;
+            --sidebar-bg: #F3F4F6;
+            --text-color: #1F2937;
+            --border-color: #E5E7EB;
+        }
+        
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background-color: var(--background-color);
+            color: var(--text-color);
+            height: 100vh;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .navbar {
+            background-color: white;
+            border-bottom: 1px solid var(--border-color);
+            padding: 0.5rem 1rem;
+        }
+        
+        .navbar-brand {
+            font-weight: 700;
+            color: var(--primary-color);
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        
+        .main-container {
+            display: flex;
+            flex: 1;
+            overflow: hidden;
+        }
+        
+        .sidebar {
+            width: 250px;
+            background-color: var(--sidebar-bg);
+            border-right: 1px solid var(--border-color);
+            padding: 1rem;
+            overflow-y: auto;
+        }
+        
+        .content {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        
+        .chat-container {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            padding: 1rem;
+            overflow-y: auto;
+        }
+        
+        .visualization-container {
+            height: 60%;
+            border-top: 1px solid var(--border-color);
+            padding: 1rem;
+            overflow: hidden;
+            position: relative;
+        }
+        
+        .tabs {
+            display: flex;
+            border-bottom: 1px solid var(--border-color);
+            margin-bottom: 1rem;
+        }
+        
+        .tab {
+            padding: 0.5rem 1rem;
+            cursor: pointer;
+            border-bottom: 2px solid transparent;
+        }
+        
+        .tab.active {
+            border-bottom: 2px solid var(--primary-color);
+            color: var(--primary-color);
+            font-weight: 500;
+        }
+        
+        .chat-input {
+            display: flex;
+            padding: 1rem;
+            border-top: 1px solid var(--border-color);
+            background-color: white;
+        }
+        
+        .chat-input input {
+            flex: 1;
+            padding: 0.75rem 1rem;
+            border: 1px solid var(--border-color);
+            border-radius: 0.375rem;
+            margin-right: 0.5rem;
+        }
+        
+        .chat-input button {
+            background-color: var(--primary-color);
+            color: white;
+            border: none;
+            border-radius: 0.375rem;
+            padding: 0.75rem 1.5rem;
+            font-weight: 500;
+        }
+        
+        .message {
+            margin-bottom: 1rem;
+            max-width: 80%;
+        }
+        
+        .message.user {
+            align-self: flex-end;
+            background-color: var(--primary-color);
+            color: white;
+            border-radius: 1rem 1rem 0 1rem;
+            padding: 0.75rem 1rem;
+        }
+        
+        .message.assistant {
+            align-self: flex-start;
+            background-color: white;
+            border: 1px solid var(--border-color);
+            border-radius: 1rem 1rem 1rem 0;
+            padding: 0.75rem 1rem;
+        }
+        
+        .visualization-content {
+            height: calc(100% - 40px);
+            overflow: auto;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        
+        .visualization-content img {
+            max-width: 100%;
+            max-height: 100%;
+            object-fit: contain;
+        }
+        
+        .sidebar-section {
+            margin-bottom: 1.5rem;
+        }
+        
+        .sidebar-section h5 {
+            font-size: 0.875rem;
+            text-transform: uppercase;
+            color: #6B7280;
+            margin-bottom: 0.75rem;
+            font-weight: 600;
+        }
+        
+        .sidebar-item {
+            display: flex;
+            align-items: center;
+            padding: 0.5rem 0.75rem;
+            border-radius: 0.375rem;
+            margin-bottom: 0.25rem;
+            cursor: pointer;
+            color: #4B5563;
+            font-size: 0.875rem;
+        }
+        
+        .sidebar-item:hover {
+            background-color: #F3F4F6;
+        }
+        
+        .sidebar-item.active {
+            background-color: #EDE9FE;
+            color: var(--primary-color);
+        }
+        
+        .sidebar-item i {
+            margin-right: 0.5rem;
+        }
+        
+        .loader {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            display: none;
+        }
+        
+        .spinner-border {
+            color: var(--primary-color);
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="#">
+                <i class="bi bi-braces-asterisk"></i>
+                MindPilot 认知图谱平台
+            </a>
+            <div>
+                <button class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#settingsModal">
+                    <i class="bi bi-gear"></i> 设置
+                </button>
+                <button class="btn btn-sm btn-outline-secondary ms-2">
+                    <i class="bi bi-question-circle"></i> 帮助
+                </button>
+            </div>
+        </div>
+    </nav>
+    
+    <div class="main-container">
+        <div class="sidebar">
+            <div class="sidebar-section">
+                <h5>会话历史</h5>
+                <div class="sidebar-item active">
+                    <i class="bi bi-chat-left-text"></i> 当前会话
+                </div>
+                <div class="sidebar-item">
+                    <i class="bi bi-chat-left"></i> 产品战略分析
+                </div>
+                <div class="sidebar-item">
+                    <i class="bi bi-chat-left"></i> 市场调研报告
+                </div>
+            </div>
+            
+            <div class="sidebar-section">
+                <h5>认知模型</h5>
+                <div class="sidebar-item">
+                    <i class="bi bi-diagram-3"></i> 知识图谱
+                </div>
+                <div class="sidebar-item">
+                    <i class="bi bi-arrow-left-right"></i> 思维链
+                </div>
+                <div class="sidebar-item">
+                    <i class="bi bi-person-vcard"></i> 用户画像
+                </div>
+                <div class="sidebar-item">
+                    <i class="bi bi-graph-up"></i> 决策模型
+                </div>
+            </div>
+            
+            <div class="sidebar-section">
+                <h5>工具</h5>
+                <div class="sidebar-item">
+                    <i class="bi bi-file-earmark-text"></i> 导出报告
+                </div>
+                <div class="sidebar-item">
+                    <i class="bi bi-share"></i> 分享结果
+                </div>
+            </div>
+        </div>
+        
+        <div class="content">
+            <div class="chat-container" id="chatContainer">
+                <!-- 消息将在这里动态添加 -->
+                <div class="message assistant">
+                    欢迎使用MindPilot认知图谱平台。我可以帮助您分析问题、做出决策，并生成可视化的认知图谱。请告诉我您想探讨的话题或需要解决的问题。
+                </div>
+            </div>
+            
+            <div class="visualization-container">
+                <div class="tabs">
+                    <div class="tab active" data-tab="knowledge-graph">知识图谱</div>
+                    <div class="tab" data-tab="thought-chain">思维链</div>
+                    <div class="tab" data-tab="cognitive-map">认知图谱</div>
+                    <div class="tab" data-tab="decision-model">决策模型</div>
+                </div>
+                
+                <div class="visualization-content" id="visualizationContent">
+                    <!-- 可视化内容将在这里动态添加 -->
+                    <div class="text-center text-muted">
+                        <p>开始对话后，这里将显示相关的可视化图表</p>
+                    </div>
+                </div>
+                
+                <div class="loader">
+                    <div class="spinner-border" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="chat-input">
+                <input type="text" id="userInput" placeholder="输入您的问题或想法..." class="form-control">
+                <button id="sendButton" class="btn">
+                    <i class="bi bi-send"></i> 发送
+                </button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- 设置成功提示 -->
+    <div class="position-fixed bottom-0 end-0 p-3" style="z-index: 11">
+        <div id="settingsToast" class="toast" role="alert" aria-live="assertive" aria-atomic="true">
+            <div class="toast-header">
+                <i class="bi bi-check-circle-fill text-success me-2"></i>
+                <strong class="me-auto">成功</strong>
+                <button type="button" class="btn-close" data-bs-dismiss="toast" aria-label="Close"></button>
+            </div>
+            <div class="toast-body">
+                设置已成功保存并应用。
+            </div>
+        </div>
+    </div>
+    
+    <!-- 设置模态框 -->
+    <div class="modal fade" id="settingsModal" tabindex="-1" aria-labelledby="settingsModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="settingsModalLabel">设置</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <ul class="nav nav-tabs" id="settingsTabs" role="tablist">
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link active" id="model-tab" data-bs-toggle="tab" data-bs-target="#model" type="button" role="tab" aria-controls="model" aria-selected="true">
+                                <i class="bi bi-cpu"></i> 模型
+                            </button>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link" id="display-tab" data-bs-toggle="tab" data-bs-target="#display" type="button" role="tab" aria-controls="display" aria-selected="false">
+                                <i class="bi bi-display"></i> 显示
+                            </button>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link" id="chat-tab" data-bs-toggle="tab" data-bs-target="#chat" type="button" role="tab" aria-controls="chat" aria-selected="false">
+                                <i class="bi bi-chat"></i> 对话
+                            </button>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link" id="other-tab" data-bs-toggle="tab" data-bs-target="#other" type="button" role="tab" aria-controls="other" aria-selected="false">
+                                <i class="bi bi-gear"></i> 其他
+                            </button>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link" id="extension-tab" data-bs-toggle="tab" data-bs-target="#extension" type="button" role="tab" aria-controls="extension" aria-selected="false">
+                                <i class="bi bi-puzzle"></i> 扩展
+                            </button>
+                        </li>
+                    </ul>
+                    <div class="tab-content pt-3" id="settingsTabContent">
+                        <div class="tab-pane fade show active" id="model" role="tabpanel" aria-labelledby="model-tab">
+                            <div class="mb-3">
+                                <label for="modelProvider" class="form-label">模型提供方:</label>
+                                <select class="form-select" id="modelProvider">
+                                    <option value="deepseek">DeepSeek API</option>
+                                    <option value="openai">OpenAI</option>
+                                    <option value="gemini">Google Gemini</option>
+                                    <option value="claude">Anthropic Claude</option>
+                                    <option value="tongyi">阿里通义</option>
+                                    <option value="douban">百度文心一言</option>
+                                </select>
+                            </div>
+                            <div class="mb-3">
+                                <label for="apiKey" class="form-label">API 密钥:</label>
+                                <div class="input-group">
+                                    <input type="password" class="form-control" id="apiKey" value="sk-5c35391ff9f04c73a3ccafff36fed371">
+                                    <button class="btn btn-outline-secondary" type="button" id="toggleApiKey">
+                                        <i class="bi bi-eye"></i>
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="mb-3">
+                                <label for="modelName" class="form-label">模型名称:</label>
+                                <input type="text" class="form-control" id="modelName" value="DeepSeek-R1">
+                            </div>
+                            <div class="mb-3">
+                                <label for="baseUrl" class="form-label">API 基础 URL:</label>
+                                <input type="text" class="form-control" id="baseUrl" value="https://api.deepseek.com/v1">
+                            </div>
+                            <div class="mb-3">
+                                <button class="btn btn-primary" id="testConnection">测试连接</button>
+                                <span id="connectionStatus" class="ms-2"></span>
+                            </div>
+                            <div class="mb-3">
+                                <button class="btn btn-outline-primary" id="addNewModel" data-bs-toggle="collapse" data-bs-target="#newModelForm">
+                                    <i class="bi bi-plus-circle"></i> 添加新模型
+                                </button>
+                            </div>
+                            <div class="collapse mb-3" id="newModelForm">
+                                <div class="card card-body">
+                                    <h6>添加新模型</h6>
+                                    <div class="mb-2">
+                                        <label for="newModelName" class="form-label">模型名称:</label>
+                                        <input type="text" class="form-control" id="newModelName" placeholder="例如: My Custom Model">
+                                    </div>
+                                    <div class="mb-2">
+                                        <label for="newModelProvider" class="form-label">提供方:</label>
+                                        <input type="text" class="form-control" id="newModelProvider" placeholder="例如: Custom API">
+                                    </div>
+                                    <div class="mb-2">
+                                        <label for="newModelUrl" class="form-label">API URL:</label>
+                                        <input type="text" class="form-control" id="newModelUrl" placeholder="例如: https://api.example.com/v1">
+                                    </div>
+                                    <div class="mb-2">
+                                        <label for="newModelKey" class="form-label">API 密钥:</label>
+                                        <input type="password" class="form-control" id="newModelKey" placeholder="输入API密钥">
+                                    </div>
+                                    <button class="btn btn-success" id="saveNewModel">保存模型</button>
+                                </div>
+                            </div>
+                            <div class="accordion" id="advancedSettingsAccordion">
+                                <div class="accordion-item">
+                                    <h2 class="accordion-header" id="headingAdvanced">
+                                        <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapseAdvanced" aria-expanded="false" aria-controls="collapseAdvanced">
+                                            高级设置
+                                        </button>
+                                    </h2>
+                                    <div id="collapseAdvanced" class="accordion-collapse collapse" aria-labelledby="headingAdvanced" data-bs-parent="#advancedSettingsAccordion">
+                                        <div class="accordion-body">
+                                            <div class="mb-3">
+                                                <label for="contextWindow" class="form-label">上下文窗口大小:</label>
+                                                <div class="d-flex align-items-center">
+                                                    <input type="range" class="form-range flex-grow-1 me-2" id="contextWindow" min="1" max="100" value="50">
+                                                    <span id="contextWindowValue">不限制</span>
+                                                </div>
+                                            </div>
+                                            <div class="mb-3">
+                                                <label for="temperature" class="form-label">生成多样性(Temperature):</label>
+                                                <div class="d-flex align-items-center">
+                                                    <input type="range" class="form-range flex-grow-1 me-2" id="temperature" min="0" max="1" step="0.1" value="0.7">
+                                                    <span id="temperatureValue">0.7</span>
+                                                </div>
+                                            </div>
+                                            <div class="mb-3">
+                                                <div class="form-check form-switch">
+                                                    <input class="form-check-input" type="checkbox" id="streamingResponse" checked>
+                                                    <label class="form-check-label" for="streamingResponse">启用流式响应</label>
+                                                </div>
+                                            </div>
+                                            <div class="mb-3">
+                                                <div class="form-check form-switch">
+                                                    <input class="form-check-input" type="checkbox" id="saveHistory" checked>
+                                                    <label class="form-check-label" for="saveHistory">保存对话历史</label>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="tab-pane fade" id="display" role="tabpanel" aria-labelledby="display-tab">
+                            <p>显示设置内容将在这里</p>
+                        </div>
+                        <div class="tab-pane fade" id="chat" role="tabpanel" aria-labelledby="chat-tab">
+                            <p>对话设置内容将在这里</p>
+                        </div>
+                        <div class="tab-pane fade" id="other" role="tabpanel" aria-labelledby="other-tab">
+                            <p>其他设置内容将在这里</p>
+                        </div>
+                        <div class="tab-pane fade" id="extension" role="tabpanel" aria-labelledby="extension-tab">
+                            <p>扩展设置内容将在这里</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                    <button type="button" class="btn btn-primary" id="saveSettings">保存</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="{{ url_for('static', filename='main.js') }}"></script>
+    <script>
+        // 用户ID - 实际应用中应该从登录系统获取
+        const userId = 'user_' + Math.random().toString(36).substr(2, 9);
+        
+        // DOM元素
+        const chatContainer = document.getElementById('chatContainer');
+        const userInput = document.getElementById('userInput');
+        const sendButton = document.getElementById('sendButton');
+        const visualizationContent = document.getElementById('visualizationContent');
+        const tabs = document.querySelectorAll('.tab');
+        const loader = document.querySelector('.loader');
+        
+        // 设置相关元素
+        const modelProvider = document.getElementById('modelProvider');
+        const apiKey = document.getElementById('apiKey');
+        const toggleApiKey = document.getElementById('toggleApiKey');
+        const modelName = document.getElementById('modelName');
+        const baseUrl = document.getElementById('baseUrl');
+        const testConnection = document.getElementById('testConnection');
+        const connectionStatus = document.getElementById('connectionStatus');
+        const saveSettings = document.getElementById('saveSettings');
+        const contextWindow = document.getElementById('contextWindow');
+        const contextWindowValue = document.getElementById('contextWindowValue');
+        const temperature = document.getElementById('temperature');
+        const temperatureValue = document.getElementById('temperatureValue');
+        const saveNewModel = document.getElementById('saveNewModel');
+        
+        // 当前活动的可视化类型
+        let activeVisualization = 'knowledge-graph';
+        
+        // 可视化图片URL
+        let visualizationUrls = {
+            'knowledge-graph': '',
+            'thought-chain': '',
+            'cognitive-map': '',
+            'decision-model': ''
+        };
+        
+        // 切换标签页
+        tabs.forEach(tab => {
+            tab.addEventListener('click', () => {
+                // 移除所有活动状态
+                tabs.forEach(t => t.classList.remove('active'));
+                
+                // 添加当前活动状态
+                tab.classList.add('active');
+                
+                // 更新活动可视化
+                activeVisualization = tab.dataset.tab;
+                
+                // 更新可视化内容
+                updateVisualization();
+            });
+        });
+        
+        // 发送消息
+        function sendMessage() {
+            const message = userInput.value.trim();
+            if (message === '') return;
+            
+            // 添加用户消息到聊天
+            addMessage(message, 'user');
+            
+            // 清空输入框
+            userInput.value = '';
+            
+            // 显示加载动画
+            loader.style.display = 'block';
+            
+            // 发送API请求
+            fetch('/api/chat', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    message: message,
+                    user_id: userId
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                // 隐藏加载动画
+                loader.style.display = 'none';
+                
+                // 添加助手回复
+                addMessage(data.response, 'assistant');
+                
+                // 更新可视化URL
+                visualizationUrls = {
+                    'knowledge-graph': data.knowledge_graph_url,
+                    'thought-chain': data.thought_chain_url,
+                    'cognitive-map': data.cognitive_map_url,
+                    'decision-model': data.decision_model_url
+                };
+                
+                // 更新可视化
+                updateVisualization();
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                loader.style.display = 'none';
+                addMessage('抱歉，发生了错误，请稍后再试。', 'assistant');
+            });
+        }
+        
+        // 添加消息到聊天
+        function addMessage(text, sender) {
+            const messageDiv = document.createElement('div');
+            messageDiv.classList.add('message', sender);
+            messageDiv.textContent = text;
+            chatContainer.appendChild(messageDiv);
+            
+            // 滚动到底部
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+        }
+        
+        // 更新可视化
+        function updateVisualization() {
+            const url = visualizationUrls[activeVisualization];
+            
+            if (url) {
+                visualizationContent.innerHTML = `<img src="${url}" alt="${activeVisualization}">`;
+            } else {
+                visualizationContent.innerHTML = `
+                    <div class="text-center text-muted">
+                        <p>继续对话以生成${getVisualizationName(activeVisualization)}</p>
+                    </div>
+                `;
+            }
+        }
+        
+        // 获取可视化名称
+        function getVisualizationName(key) {
+            const names = {
+                'knowledge-graph': '知识图谱',
+                'thought-chain': '思维链',
+                'cognitive-map': '认知图谱',
+                'decision-model': '决策模型'
+            };
+            return names[key] || key;
+        }
+        
+        // 事件监听器
+        sendButton.addEventListener('click', sendMessage);
+        
+        userInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                sendMessage();
+            }
+        });
+        
+        // 设置相关事件监听器
+        toggleApiKey.addEventListener('click', () => {
+            if (apiKey.type === 'password') {
+                apiKey.type = 'text';
+                toggleApiKey.innerHTML = '<i class="bi bi-eye-slash"></i>';
+            } else {
+                apiKey.type = 'password';
+                toggleApiKey.innerHTML = '<i class="bi bi-eye"></i>';
+            }
+        });
+        
+        // 模型提供方变更事件
+        modelProvider.addEventListener('change', () => {
+            // 根据选择的提供方更新默认值
+            switch(modelProvider.value) {
+                case 'deepseek':
+                    baseUrl.value = 'https://api.deepseek.com/v1';
+                    modelName.value = 'DeepSeek-R1';
+                    break;
+                case 'openai':
+                    baseUrl.value = 'https://api.openai.com/v1';
+                    modelName.value = 'gpt-4';
+                    break;
+                case 'gemini':
+                    baseUrl.value = 'https://generativelanguage.googleapis.com/v1';
+                    modelName.value = 'gemini-pro';
+                    break;
+                case 'claude':
+                    baseUrl.value = 'https://api.anthropic.com/v1';
+                    modelName.value = 'claude-3-opus';
+                    break;
+                case 'tongyi':
+                    baseUrl.value = 'https://dashscope.aliyuncs.com/api/v1';
+                    modelName.value = 'qwen-max';
+                    break;
+                case 'douban':
+                    baseUrl.value = 'https://aip.baidubce.com/rpc/2.0/ai_custom/v1';
+                    modelName.value = 'ernie-bot-4';
+                    break;
+            }
+        });
+        
+        // 测试连接
+        testConnection.addEventListener('click', () => {
+            connectionStatus.innerHTML = '<span class="text-warning"><i class="bi bi-hourglass-split"></i> 测试中...</span>';
+            
+            // 模拟API测试
+            setTimeout(() => {
+                connectionStatus.innerHTML = '<span class="text-success"><i class="bi bi-check-circle"></i> 连接成功</span>';
+            }, 1500);
+        });
+        
+        // 保存新模型
+        saveNewModel.addEventListener('click', () => {
+            const newModelName = document.getElementById('newModelName').value;
+            const newModelProvider = document.getElementById('newModelProvider').value;
+            const newModelUrl = document.getElementById('newModelUrl').value;
+            const newModelKey = document.getElementById('newModelKey').value;
+            
+            if (newModelName && newModelProvider && newModelUrl) {
+                // 添加到模型提供方下拉列表
+                const option = document.createElement('option');
+                option.value = newModelProvider.toLowerCase().replace(/\s+/g, '_');
+                option.textContent = newModelProvider;
+                modelProvider.appendChild(option);
+                modelProvider.value = option.value;
+                
+                // 更新其他字段
+                modelName.value = newModelName;
+                baseUrl.value = newModelUrl;
+                apiKey.value = newModelKey;
+                
+                // 关闭折叠面板
+                const collapse = bootstrap.Collapse.getInstance(document.getElementById('newModelForm'));
+                collapse.hide();
+                
+                // 清空表单
+                document.getElementById('newModelName').value = '';
+                document.getElementById('newModelProvider').value = '';
+                document.getElementById('newModelUrl').value = '';
+                document.getElementById('newModelKey').value = '';
+            }
+        });
+        
+        // 滑块值更新
+        contextWindow.addEventListener('input', () => {
+            if (contextWindow.value >= 95) {
+                contextWindowValue.textContent = '不限制';
+            } else {
+                contextWindowValue.textContent = contextWindow.value;
+            }
+        });
+        
+        temperature.addEventListener('input', () => {
+            temperatureValue.textContent = temperature.value;
+        });
+        
+        // 保存设置
+        saveSettings.addEventListener('click', () => {
+            // 保存设置到本地存储
+            const settings = {
+                provider: modelProvider.value,
+                apiKey: apiKey.value,
+                modelName: modelName.value,
+                baseUrl: baseUrl.value,
+                temperature: temperature.value,
+                contextWindow: contextWindow.value,
+                streamingResponse: document.getElementById('streamingResponse').checked,
+                saveHistory: document.getElementById('saveHistory').checked
+            };
+            
+            localStorage.setItem('mindpilotSettings', JSON.stringify(settings));
+            
+            // 关闭模态框
+            const modal = bootstrap.Modal.getInstance(document.getElementById('settingsModal'));
+            modal.hide();
+            
+            // 显示保存成功提示
+            alert('设置已保存');
+        });
+        
+        // 加载保存的设置
+        function loadSettings() {
+            const savedSettings = localStorage.getItem('mindpilotSettings');
+            if (savedSettings) {
+                const settings = JSON.parse(savedSettings);
+                
+                modelProvider.value = settings.provider || 'deepseek';
+                apiKey.value = settings.apiKey || '';
+                modelName.value = settings.modelName || 'DeepSeek-R1';
+                baseUrl.value = settings.baseUrl || 'https://api.deepseek.com/v1';
+                temperature.value = settings.temperature || 0.7;
+                temperatureValue.textContent = settings.temperature || 0.7;
+                contextWindow.value = settings.contextWindow || 50;
+                
+                if (settings.contextWindow >= 95) {
+                    contextWindowValue.textContent = '不限制';
+                } else {
+                    contextWindowValue.textContent = settings.contextWindow || 50;
+                }
+                
+                if (settings.streamingResponse !== undefined) {
+                    document.getElementById('streamingResponse').checked = settings.streamingResponse;
+                }
+                
+                if (settings.saveHistory !== undefined) {
+                    document.getElementById('saveHistory').checked = settings.saveHistory;
+                }
+            }
+        }
+        
+        // 页面加载时加载设置
+        document.addEventListener('DOMContentLoaded', loadSettings);
+    </script>
+</body>
+</html>
