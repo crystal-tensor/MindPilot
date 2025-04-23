@@ -368,7 +368,6 @@ def call_deepseek_api(user_input, user_id, model, temperature, stream, api_key):
 @app.route('/api/chat', methods=['POST'])
 def chat():
     data = request.json
-    app.logger.info(f"Received request data: {data}") # 添加日志记录
     user_input = data.get('message', '')
     user_id = data.get('user_id', 'default_user')
     model = data.get('model', 'deepseek-chat')
@@ -376,17 +375,14 @@ def chat():
     stream = data.get('stream', False)  # 默认不使用流式响应
     provider = data.get('provider', 'deepseek')
     
-    # 从请求体中获取API密钥
-    api_key = data.get('apiKey', '')
+    # 获取API密钥
+    api_key = request.headers.get('Authorization', '').replace('Bearer ', '')
     
     if not user_input:
         return jsonify({'error': 'No message provided'}), 400
     
     # 尝试调用DeepSeek API
-    if provider == 'deepseek':
-        if not api_key:
-            return jsonify({'error': '未在请求体中提供DeepSeek API密钥'}), 400
-        
+    if provider == 'deepseek' and api_key:
         api_response = call_deepseek_api(user_input, user_id, model, temperature, stream, api_key)
         if api_response:
             # 存储用户对话历史
@@ -433,16 +429,14 @@ def chat():
         else:
             return jsonify({'error': 'DeepSeek API调用失败'}), 500
     else:
-        # 如果不是 deepseek 提供商，或者未来支持其他提供商的逻辑
-        return jsonify({'error': f'不支持的提供商: {provider} 或缺少必要的配置'}), 400
+        return jsonify({'error': '未提供DeepSeek API密钥'}), 400
 
 @app.route('/api/test_connection', methods=['POST'])
 def test_connection():
     """测试API连接"""
     data = request.json
     provider = data.get('provider', 'deepseek')
-    # 从请求体中获取API密钥
-    api_key = data.get('apiKey', '')
+    api_key = request.headers.get('Authorization', '').replace('Bearer ', '')
     model_name = data.get('modelName')
     base_url = data.get('baseUrl')
     

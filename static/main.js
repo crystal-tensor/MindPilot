@@ -85,12 +85,19 @@ async function sendMessage() {
         // 获取当前设置
         const settings = getModelSettings();
         
+        // 检查API密钥
+        if (!settings.apiKey) {
+            loadingMessage.textContent = '请在设置中配置API密钥';
+            loadingMessage.classList.add('error');
+            return;
+        }
+        
         // 发送请求到后端API
         const response = await fetch('/api/chat', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                'Authorization': `Bearer ${settings.apiKey}`
+                'Authorization': `Bearer ${settings.apiKey}` // 将 API 密钥添加到 Authorization header
             },
             body: JSON.stringify({
                 message: message,
@@ -99,17 +106,27 @@ async function sendMessage() {
                 temperature: parseFloat(settings.temperature),
                 stream: settings.streamingResponse,
                 provider: settings.provider
+                // api_key 已移至 header
             })
         });
         
         if (!response.ok) {
-            throw new Error('网络响应不正常');
+            const errorData = await response.json();
+            throw new Error(errorData.error || '网络响应不正常');
         }
         
         const data = await response.json();
         
         // 更新聊天界面
         loadingMessage.textContent = data.response;
+        
+        // 如果有警告信息，显示给用户
+        if (data.warning) {
+            const warningElement = document.createElement('div');
+            warningElement.classList.add('message', 'warning');
+            warningElement.textContent = data.warning;
+            chatContainer.appendChild(warningElement);
+        }
         
         // 更新可视化
         updateVisualizationWithData(data);
@@ -122,7 +139,16 @@ async function sendMessage() {
         
     } catch (error) {
         console.error('Error:', error);
-        loadingMessage.textContent = '抱歉，处理您的请求时出现了错误。';
+        loadingMessage.textContent = '抱歉，处理您的请求时出现了错误: ' + error.message;
+        loadingMessage.classList.add('error');
+        
+        // 记录详细错误信息到控制台，便于调试
+        console.log('请求详情:', {
+            'API密钥是否提供': !!settings.apiKey,
+            '模型名称': settings.modelName,
+            '提供商': settings.provider,
+            '请求时间': new Date().toISOString()
+        });
     }
 }
 
@@ -163,8 +189,8 @@ function initSettingsEvents() {
         // 根据选择的提供方更新默认值
         switch(modelProvider.value) {
             case 'deepseek':
-                baseUrl.value = 'https://api.deepseek.com/v1';
-                modelName.value = 'DeepSeek-R1';
+                baseUrl.value = 'https://api.deepseek.com';
+                modelName.value = 'deepseek-chat';
                 break;
             case 'openai':
                 baseUrl.value = 'https://api.openai.com/v1';
@@ -367,8 +393,8 @@ function loadSettings() {
         modelSettings = {
             provider: 'deepseek',
             apiKey: 'sk-5c35391ff9f04c73a3ccafff36fed371',
-            modelName: 'DeepSeek-R1',
-            baseUrl: 'https://api.deepseek.com/v1',
+            modelName: 'deepseek-chat',
+            baseUrl: 'https://api.deepseek.com',
             temperature: 0.7,
             contextWindow: 50,
             streamingResponse: true,
