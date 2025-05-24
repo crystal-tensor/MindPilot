@@ -7,6 +7,8 @@ import numpy as np
 from collections import Counter, defaultdict
 import matplotlib
 matplotlib.use('Agg')  # 非交互式后端
+import datetime
+import uuid
 
 # 设置中文字体支持
 plt.rcParams['font.sans-serif'] = ['Arial Unicode MS']
@@ -24,9 +26,7 @@ user_sessions = {}
 # 模型提供方配置
 model_providers = {
     'deepseek': {
-        # 'base_url': 'https://api.deepseek.com/v1',
-        # 'default_model': 'DeepSeek-R1'
-        'base_url': 'https://api.deepseek.com',
+        'base_url': 'https://api.deepseek.com/v1',  # 确保包含 /v1
         'default_model': 'deepseek-chat'
     },
     'openai': {
@@ -80,69 +80,177 @@ def extract_keywords(text):
     return [word for word, freq in sorted_keywords[:10]]
 
 # 生成知识图谱
-def generate_knowledge_graph(user_id):
+def generate_knowledge_graph(user_id, conversation_data=None):
     """生成用户知识图谱"""
-    if user_id not in user_sessions:
-        return
+    # 收集所有对话内容
+    all_chat_history = []
+    all_knowledge_entities = set()
+    all_user_profile = defaultdict(int)
+    
+    # 如果提供了特定对话数据，使用它
+    if conversation_data:
+        chat_history = conversation_data.get('chat_history', [])
+        user_profile = conversation_data.get('user_profile', {})
+        knowledge_entities = set(conversation_data.get('knowledge_entities', []))
+        
+        all_chat_history.extend(chat_history)
+        all_knowledge_entities.update(knowledge_entities)
+        for key, value in user_profile.items():
+            all_user_profile[key] += value
+    else:
+        # 收集当前用户会话数据
+        if user_id in user_sessions:
+            session = user_sessions[user_id]
+            all_chat_history.extend(session['chat_history'])
+            all_knowledge_entities.update(session['knowledge_entities'])
+            for key, value in session['user_profile'].items():
+                all_user_profile[key] += value
+    
+    # 收集所有保存的对话数据以获得更全面的知识图谱
+    try:
+        conversations_path = 'conversations'
+        if os.path.exists(conversations_path):
+            for filename in os.listdir(conversations_path):
+                if filename.endswith('.json'):
+                    filepath = os.path.join(conversations_path, filename)
+                    try:
+                        with open(filepath, 'r', encoding='utf-8') as f:
+                            saved_conversation = json.load(f)
+                        
+                        # 添加保存对话的内容到总体数据中
+                        saved_chat_history = saved_conversation.get('chat_history', [])
+                        saved_user_profile = saved_conversation.get('user_profile', {})
+                        saved_knowledge_entities = saved_conversation.get('knowledge_entities', [])
+                        
+                        all_chat_history.extend(saved_chat_history)
+                        all_knowledge_entities.update(saved_knowledge_entities)
+                        for key, value in saved_user_profile.items():
+                            all_user_profile[key] += value
+                            
+                    except Exception as e:
+                        print(f"读取保存对话文件失败: {filename}, 错误: {e}")
+                        continue
+    except Exception as e:
+        print(f"扫描保存对话文件夹失败: {e}")
+    
+    print(f"知识图谱生成：总共收集了 {len(all_chat_history)} 条对话消息")
+    print(f"知识图谱生成：总共收集了 {len(all_knowledge_entities)} 个知识实体")
+    print(f"知识图谱生成：用户画像包含 {len(all_user_profile)} 个特征")
     
     # 创建图结构
     G = nx.Graph()
     
-    # 添加节点和边
-    profile = user_sessions[user_id]['user_profile']
-    entities = list(user_sessions[user_id]['knowledge_entities'])
+    # 提取所有关键词
+    all_keywords = []
+    keyword_cooccurrence = defaultdict(int)
     
-    # 添加中心节点
-    G.add_node('用户', size=500, color='#7C3AED')
+    # 从所有对话历史中提取关键词
+    for message in all_chat_history:
+        if message.get('role') in ['user', 'assistant']:
+            keywords = extract_keywords(message.get('content', ''))
+            all_keywords.extend(keywords)
+            
+            # 计算关键词共现
+            for i in range(len(keywords)):
+                for j in range(i+1, len(keywords)):
+                    pair = tuple(sorted([keywords[i], keywords[j]]))
+                    keyword_cooccurrence[pair] += 1
     
-    # 添加实体节点和连接
-    for entity, weight in profile.items():
-        if len(entity) > 1:  # 过滤掉单字实体
-            G.add_node(entity, size=100 + weight * 50, color='#C4B5FD')
-            G.add_edge('用户', entity, weight=weight)
+    # 统计关键词频率
+    keyword_freq = Counter(all_keywords)
     
-    # 实体间连接（基于共现）
-    chat_history = user_sessions[user_id]['chat_history']
-    for message in chat_history:
-        if message['role'] == 'user':
-            msg_keywords = extract_keywords(message['content'])
-            for i in range(len(msg_keywords)):
-                for j in range(i+1, len(msg_keywords)):
-                    if G.has_node(msg_keywords[i]) and G.has_node(msg_keywords[j]):
-                        if G.has_edge(msg_keywords[i], msg_keywords[j]):
-                            G[msg_keywords[i]][msg_keywords[j]]['weight'] += 1
-                        else:
-                            G.add_edge(msg_keywords[i], msg_keywords[j], weight=1)
+    # 添加节点（只添加频率较高的关键词）
+    min_freq = max(2, len(all_chat_history) // 50)  # 动态调整最小频率
+    top_keywords = min(30, len(keyword_freq))  # 限制为前30个关键词
+    
+    for keyword, freq in keyword_freq.most_common(top_keywords):
+        if freq >= min_freq:
+            # 节点大小根据频率和重要性调整
+            node_size = 100 + freq * 20
+            node_color = '#7C3AED' if freq >= min_freq * 3 else '#C4B5FD'
+            
+            G.add_node(keyword, 
+                      size=node_size,
+                      color=node_color,
+                      frequency=freq)
+    
+    # 添加边（共现关系）
+    min_cooccur = max(1, len(all_chat_history) // 100)  # 动态调整最小共现次数
+    for (word1, word2), cooccur_count in keyword_cooccurrence.items():
+        if G.has_node(word1) and G.has_node(word2) and cooccur_count >= min_cooccur:
+            G.add_edge(word1, word2, weight=cooccur_count)
+    
+    # 如果图太稀疏，添加一些基于用户画像的连接
+    if len(G.edges()) < 5 and all_user_profile:
+        profile_keywords = list(all_user_profile.keys())[:10]
+        for keyword in profile_keywords:
+            if G.has_node(keyword):
+                # 与其他高频词建立连接
+                for other_keyword in list(G.nodes())[:5]:
+                    if other_keyword != keyword and not G.has_edge(keyword, other_keyword):
+                        G.add_edge(keyword, other_keyword, weight=1)
     
     # 绘制图谱
-    plt.figure(figsize=(10, 8))
-    pos = nx.spring_layout(G, k=0.3, iterations=50)
+    plt.figure(figsize=(14, 10))
+    if len(G.nodes()) > 0:
+        # 使用spring layout但增加更多迭代以获得更好的布局
+        pos = nx.spring_layout(G, k=0.8, iterations=150, seed=42)
+        
+        # 节点大小和颜色
+        node_sizes = [G.nodes[node].get('size', 100) for node in G.nodes()]
+        node_colors = [G.nodes[node].get('color', '#C4B5FD') for node in G.nodes()]
+        
+        # 边的粗细
+        edge_weights = [G[u][v].get('weight', 1) for u, v in G.edges()]
+        edge_widths = [min(w * 2, 8) for w in edge_weights]  # 增加边的可见性
+        
+        # 绘制节点
+        nx.draw_networkx_nodes(
+            G, pos,
+            node_size=node_sizes,
+            node_color=node_colors,
+            alpha=0.8,
+            edgecolors='black',
+            linewidths=1.5
+        )
+        
+        # 绘制边
+        nx.draw_networkx_edges(
+            G, pos,
+            edge_color='gray',
+            width=edge_widths,
+            alpha=0.6
+        )
+        
+        # 绘制标签
+        nx.draw_networkx_labels(
+            G, pos,
+            font_size=9,
+            font_color='black',
+            font_weight='bold',
+            font_family='Arial Unicode MS'
+        )
+        
+        # 添加统计信息到标题
+        title = f'综合知识图谱 (基于 {len(all_chat_history)} 条对话，{len(G.nodes())} 个概念)'
+        plt.title(title, fontsize=16, fontweight='bold', pad=20)
+    else:
+        plt.text(0.5, 0.5, '暂无足够数据生成知识图谱\n请先进行一些对话', 
+                ha='center', va='center', fontsize=14, transform=plt.gca().transAxes)
     
-    # 节点大小和颜色
-    node_sizes = [G.nodes[node].get('size', 100) for node in G.nodes()]
-    node_colors = [G.nodes[node].get('color', '#C4B5FD') for node in G.nodes()]
-    
-    # 边的粗细
-    edge_weights = [G[u][v].get('weight', 1) for u, v in G.edges()]
-    
-    # 绘制
-    nx.draw_networkx(
-        G, pos,
-        with_labels=True,
-        node_size=node_sizes,
-        node_color=node_colors,
-        edge_color='gray',
-        width=[w/2 for w in edge_weights],
-        font_size=10,
-        font_color='black',
-        alpha=0.8
-    )
-    
-    plt.title('用户知识图谱', fontsize=16)
     plt.axis('off')
     plt.tight_layout()
-    plt.savefig(f'static/knowledge_graph_{user_id}.png', dpi=150, bbox_inches='tight')
+    
+    # 保存图片
+    graph_filename = f'knowledge_graph_{user_id}.png'
+    if conversation_data and 'id' in conversation_data:
+        graph_filename = f'knowledge_graph_{conversation_data["id"][:8]}.png'
+    
+    plt.savefig(f'static/{graph_filename}', dpi=150, bbox_inches='tight', 
+                facecolor='white', edgecolor='none')
     plt.close()
+    
+    return graph_filename
 
 # 生成思维链
 def generate_thought_chain(question, user_id):
@@ -273,8 +381,10 @@ def generate_decision_model(user_id):
         weighted_scores.append(weighted_score)
     
     # 绘制决策模型
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 6))
-    
+    fig = plt.figure(figsize=(14, 6))
+    ax1 = fig.add_subplot(1, 2, 1, projection='polar')
+    ax2 = fig.add_subplot(1, 2, 2)
+
     # 雷达图 - 各方案在各因素上的表现
     angles = np.linspace(0, 2*np.pi, len(factors), endpoint=False).tolist()
     angles += angles[:1]  # 闭合图形
@@ -322,11 +432,11 @@ def serve_static(filename):
     return send_from_directory('static', filename)
 
 # 调用DeepSeek API
-def call_deepseek_api(user_input, user_id, model, temperature, stream, api_key):
+def call_deepseek_api(user_input, user_id, model, temperature, stream, api_key, base_url): # 添加 base_url 参数
     """调用DeepSeek API获取响应"""
     try:
         # 创建OpenAI客户端，使用DeepSeek的API
-        client = OpenAI(api_key=api_key, base_url="https://api.deepseek.com")
+        client = OpenAI(api_key=api_key, base_url=base_url) # 使用传入的 base_url
         
         # 获取用户历史对话
         messages = []
@@ -371,23 +481,31 @@ def chat():
     app.logger.info(f"Received request data: {data}") # 添加日志记录
     user_input = data.get('message', '')
     user_id = data.get('user_id', 'default_user')
-    model = data.get('model', 'deepseek-chat')
+    # model_from_request = data.get('model') # 不再直接使用前端的模型名称，以避免错误
     temperature = data.get('temperature', 0.7)
-    stream = data.get('stream', False)  # 默认不使用流式响应
+    stream = data.get('stream', False)
     provider = data.get('provider', 'deepseek')
     
-    # 从请求体中获取API密钥
     api_key = data.get('apiKey', '')
-    
+    base_url_from_request = data.get('base_url')
+
     if not user_input:
         return jsonify({'error': 'No message provided'}), 400
     
-    # 尝试调用DeepSeek API
     if provider == 'deepseek':
         if not api_key:
             return jsonify({'error': '未在请求体中提供DeepSeek API密钥'}), 400
         
-        api_response = call_deepseek_api(user_input, user_id, model, temperature, stream, api_key)
+        # 强制使用DeepSeek提供商配置中的默认模型，以确保模型有效
+        actual_model = model_providers['deepseek']['default_model']
+        
+        # 确定要使用的 base_url
+        # 如果前端提供了 base_url，则使用它；否则，使用 model_providers 中的配置
+        actual_base_url = base_url_from_request or model_providers['deepseek']['base_url']
+        
+        app.logger.info(f"Forcing model to '{actual_model}' for DeepSeek. Using base_url: '{actual_base_url}'.")
+        
+        api_response = call_deepseek_api(user_input, user_id, actual_model, temperature, stream, api_key, actual_base_url)
         if api_response:
             # 存储用户对话历史
             if user_id not in user_sessions:
@@ -428,7 +546,8 @@ def chat():
                 'knowledge_graph_url': f'/static/knowledge_graph_{user_id}.png?t={os.path.getmtime(f"static/knowledge_graph_{user_id}.png") if os.path.exists(f"static/knowledge_graph_{user_id}.png") else 0}',
                 'thought_chain_url': f'/static/thought_chain_{user_id}.png?t={os.path.getmtime(f"static/thought_chain_{user_id}.png") if os.path.exists(f"static/thought_chain_{user_id}.png") else 0}',
                 'cognitive_map_url': f'/static/cognitive_map_{user_id}.png?t={os.path.getmtime(f"static/cognitive_map_{user_id}.png") if os.path.exists(f"static/cognitive_map_{user_id}.png") else 0}',
-                'decision_model_url': f'/static/decision_model_{user_id}.png?t={os.path.getmtime(f"static/decision_model_{user_id}.png") if os.path.exists(f"static/decision_model_{user_id}.png") else 0}'
+                'decision_model_url': f'/static/decision_model_{user_id}.png?t={os.path.getmtime(f"static/decision_model_{user_id}.png") if os.path.exists(f"static/decision_model_{user_id}.png") else 0}',
+                'image_url': f'/static/knowledge_graph_{user_id}.png?t={os.path.getmtime(f"static/knowledge_graph_{user_id}.png") if os.path.exists(f"static/knowledge_graph_{user_id}.png") else 0}'
             })
         else:
             return jsonify({'error': 'DeepSeek API调用失败'}), 500
@@ -480,5 +599,331 @@ def test_connection():
     except Exception as e:
         return jsonify({'error': f'连接测试失败: {str(e)}'}), 500
 
+# 添加对话保存功能
+@app.route('/api/save_conversation', methods=['POST'])
+def save_conversation():
+    """保存对话到本地文件"""
+    try:
+        data = request.get_json()
+        user_id = data.get('user_id')
+        conversation_name = data.get('conversation_name', f"对话_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}")
+        save_path = data.get('save_path', 'conversations')  # 默认保存路径
+        
+        if user_id not in user_sessions:
+            return jsonify({'error': '找不到用户会话'}), 404
+        
+        # 确保保存目录存在
+        if not os.path.exists(save_path):
+            os.makedirs(save_path)
+        
+        # 准备保存的数据
+        conversation_data = {
+            'id': str(uuid.uuid4()),
+            'name': conversation_name,
+            'created_at': datetime.datetime.now().isoformat(),
+            'user_id': user_id,
+            'chat_history': user_sessions[user_id]['chat_history'],
+            'user_profile': user_sessions[user_id].get('user_profile', {}),
+            'knowledge_entities': list(user_sessions[user_id].get('knowledge_entities', set()))
+        }
+        
+        # 生成文件名
+        safe_name = "".join(c for c in conversation_name if c.isalnum() or c in (' ', '-', '_')).rstrip()
+        filename = f"{safe_name}_{conversation_data['id'][:8]}.json"
+        filepath = os.path.join(save_path, filename)
+        
+        # 保存到文件
+        with open(filepath, 'w', encoding='utf-8') as f:
+            json.dump(conversation_data, f, ensure_ascii=False, indent=2)
+        
+        return jsonify({
+            'success': True,
+            'message': '对话保存成功',
+            'filepath': filepath,
+            'conversation_id': conversation_data['id']
+        })
+        
+    except Exception as e:
+        return jsonify({'error': f'保存对话失败: {str(e)}'}), 500
+
+@app.route('/api/load_conversations', methods=['GET'])
+def load_conversations():
+    """加载已保存的对话列表"""
+    try:
+        conversations_path = request.args.get('path', 'conversations')
+        
+        # 如果路径不存在，返回空列表而不是错误
+        if not os.path.exists(conversations_path):
+            print(f"路径不存在，将创建: {conversations_path}")
+            try:
+                os.makedirs(conversations_path, exist_ok=True)
+            except Exception as e:
+                print(f"创建目录失败: {e}")
+            return jsonify({'conversations': []})
+        
+        if not os.path.isdir(conversations_path):
+            return jsonify({'error': f'指定的路径不是一个文件夹: {conversations_path}'}), 400
+        
+        conversations = []
+        total_files = 0
+        error_files = 0
+        
+        for filename in os.listdir(conversations_path):
+            if filename.endswith('.json'):
+                total_files += 1
+                filepath = os.path.join(conversations_path, filename)
+                try:
+                    with open(filepath, 'r', encoding='utf-8') as f:
+                        conversation = json.load(f)
+                        
+                    # 验证必要字段
+                    if not conversation.get('id'):
+                        print(f"警告: 文件 {filename} 缺少ID字段")
+                        error_files += 1
+                        continue
+                        
+                    conversations.append({
+                        'id': conversation.get('id'),
+                        'name': conversation.get('name', '未命名对话'),
+                        'created_at': conversation.get('created_at', ''),
+                        'filepath': filepath,
+                        'message_count': len(conversation.get('chat_history', []))
+                    })
+                    
+                except json.JSONDecodeError as e:
+                    print(f"JSON解析错误 {filename}: {e}")
+                    error_files += 1
+                    continue
+                except Exception as e:
+                    print(f"读取对话文件失败: {filename}, 错误: {e}")
+                    error_files += 1
+                    continue
+        
+        # 按创建时间排序
+        conversations.sort(key=lambda x: x.get('created_at', ''), reverse=True)
+        
+        print(f"从 {conversations_path} 加载了 {len(conversations)} 个对话，共 {total_files} 个文件，{error_files} 个错误")
+        
+        return jsonify({
+            'conversations': conversations,
+            'total_files': total_files,
+            'error_files': error_files,
+            'path': conversations_path
+        })
+        
+    except Exception as e:
+        print(f"加载对话列表时发生错误: {e}")
+        return jsonify({'error': f'加载对话列表失败: {str(e)}'}), 500
+
+@app.route('/api/load_conversation/<conversation_id>', methods=['GET'])
+def load_conversation(conversation_id):
+    """加载特定对话"""
+    try:
+        conversations_path = request.args.get('path', 'conversations')
+        
+        # 检查路径是否存在
+        if not os.path.exists(conversations_path):
+            return jsonify({'error': f'指定的路径不存在: {conversations_path}'}), 404
+        
+        if not os.path.isdir(conversations_path):
+            return jsonify({'error': f'指定的路径不是一个文件夹: {conversations_path}'}), 400
+        
+        # 搜索对话文件
+        found_conversation = None
+        for filename in os.listdir(conversations_path):
+            if filename.endswith('.json'):
+                filepath = os.path.join(conversations_path, filename)
+                try:
+                    with open(filepath, 'r', encoding='utf-8') as f:
+                        conversation = json.load(f)
+                        if conversation.get('id') == conversation_id:
+                            found_conversation = conversation
+                            print(f"找到对话文件: {filepath}")
+                            print(f"对话包含 {len(conversation.get('chat_history', []))} 条消息")
+                            break
+                except json.JSONDecodeError as e:
+                    print(f"JSON解析错误 {filename}: {e}")
+                    continue
+                except Exception as e:
+                    print(f"读取文件错误 {filename}: {e}")
+                    continue
+        
+        if found_conversation:
+            return jsonify(found_conversation)
+        else:
+            return jsonify({'error': f'在路径 {conversations_path} 中找不到ID为 {conversation_id} 的对话'}), 404
+        
+    except Exception as e:
+        print(f"加载对话时发生错误: {e}")
+        return jsonify({'error': f'加载对话失败: {str(e)}'}), 500
+
+@app.route('/api/rename_conversation', methods=['POST'])
+def rename_conversation():
+    """重命名对话"""
+    try:
+        data = request.get_json()
+        conversation_id = data.get('conversation_id')
+        new_name = data.get('new_name')
+        conversations_path = data.get('path', 'conversations')
+        
+        if not conversation_id or not new_name:
+            return jsonify({'error': '缺少必要参数'}), 400
+        
+        for filename in os.listdir(conversations_path):
+            if filename.endswith('.json'):
+                filepath = os.path.join(conversations_path, filename)
+                try:
+                    with open(filepath, 'r', encoding='utf-8') as f:
+                        conversation = json.load(f)
+                    
+                    if conversation.get('id') == conversation_id:
+                        # 更新名称
+                        conversation['name'] = new_name
+                        conversation['updated_at'] = datetime.datetime.now().isoformat()
+                        
+                        # 生成新的文件名
+                        safe_name = "".join(c for c in new_name if c.isalnum() or c in (' ', '-', '_')).rstrip()
+                        new_filename = f"{safe_name}_{conversation_id[:8]}.json"
+                        new_filepath = os.path.join(conversations_path, new_filename)
+                        
+                        # 保存到新文件
+                        with open(new_filepath, 'w', encoding='utf-8') as f:
+                            json.dump(conversation, f, ensure_ascii=False, indent=2)
+                        
+                        # 删除旧文件（如果文件名不同）
+                        if filepath != new_filepath:
+                            os.remove(filepath)
+                        
+                        return jsonify({
+                            'success': True,
+                            'message': '重命名成功',
+                            'new_filepath': new_filepath
+                        })
+                        
+                except Exception as e:
+                    continue
+        
+        return jsonify({'error': '找不到指定的对话'}), 404
+        
+    except Exception as e:
+        return jsonify({'error': f'重命名失败: {str(e)}'}), 500
+
+@app.route('/api/delete_conversation', methods=['DELETE'])
+def delete_conversation():
+    """删除对话"""
+    try:
+        data = request.get_json()
+        conversation_id = data.get('conversation_id')
+        conversations_path = data.get('path', 'conversations')
+        
+        if not conversation_id:
+            return jsonify({'error': '缺少对话ID'}), 400
+        
+        for filename in os.listdir(conversations_path):
+            if filename.endswith('.json'):
+                filepath = os.path.join(conversations_path, filename)
+                try:
+                    with open(filepath, 'r', encoding='utf-8') as f:
+                        conversation = json.load(f)
+                    
+                    if conversation.get('id') == conversation_id:
+                        os.remove(filepath)
+                        return jsonify({
+                            'success': True,
+                            'message': '删除成功'
+                        })
+                        
+                except Exception as e:
+                    continue
+        
+        return jsonify({'error': '找不到指定的对话'}), 404
+        
+    except Exception as e:
+        return jsonify({'error': f'删除失败: {str(e)}'}), 500
+
+@app.route('/api/generate_knowledge_graph', methods=['POST'])
+def generate_knowledge_graph_api():
+    """生成知识图谱API"""
+    try:
+        data = request.get_json()
+        user_id = data.get('user_id')
+        conversation_id = data.get('conversation_id')
+        
+        if conversation_id:
+            # 从保存的对话生成知识图谱
+            conversations_path = data.get('path', 'conversations')
+            conversation_data = None
+            
+            for filename in os.listdir(conversations_path):
+                if filename.endswith('.json'):
+                    filepath = os.path.join(conversations_path, filename)
+                    try:
+                        with open(filepath, 'r', encoding='utf-8') as f:
+                            conv = json.load(f)
+                            if conv.get('id') == conversation_id:
+                                conversation_data = conv
+                                break
+                    except Exception as e:
+                        continue
+            
+            if not conversation_data:
+                return jsonify({'error': '找不到指定的对话'}), 404
+            
+            graph_filename = generate_knowledge_graph(user_id, conversation_data)
+        else:
+            # 从当前会话生成知识图谱
+            if user_id not in user_sessions:
+                return jsonify({'error': '找不到用户会话'}), 404
+            graph_filename = generate_knowledge_graph(user_id)
+        
+        return jsonify({
+            'success': True,
+            'graph_url': f'/static/{graph_filename}',
+            'message': '知识图谱生成成功'
+        })
+        
+    except Exception as e:
+        return jsonify({'error': f'生成知识图谱失败: {str(e)}'}), 500
+
+@app.route('/api/list_folders', methods=['GET'])
+def list_folders():
+    """列出可用的对话存储文件夹"""
+    try:
+        folders = []
+        current_dir = os.getcwd()
+        
+        # 扫描当前目录下的文件夹
+        for item in os.listdir(current_dir):
+            item_path = os.path.join(current_dir, item)
+            if os.path.isdir(item_path) and not item.startswith('.') and item != '__pycache__':
+                # 检查是否包含JSON文件（对话文件）
+                has_conversations = any(f.endswith('.json') for f in os.listdir(item_path))
+                if has_conversations or item in ['conversations', 'saved_chats', 'archives', 'projects', 'backups']:
+                    folders.append(item)
+        
+        # 添加一些常见的系统路径（如果存在）
+        common_paths = [
+            'conversations',
+            'saved_chats', 
+            'archives',
+            'projects',
+            'backups'
+        ]
+        
+        for path in common_paths:
+            if path not in folders and os.path.exists(path):
+                folders.append(path)
+        
+        # 去重并排序
+        folders = sorted(list(set(folders)))
+        
+        return jsonify({
+            'folders': folders,
+            'count': len(folders)
+        })
+        
+    except Exception as e:
+        return jsonify({'error': f'获取文件夹列表失败: {str(e)}'}), 500
+
 if __name__ == '__main__':
-    app.run(debug=True, port=5000)
+    app.run(debug=True, host='127.0.0.1', port=5000)

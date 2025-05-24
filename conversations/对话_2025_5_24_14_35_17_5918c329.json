@@ -1,0 +1,32 @@
+{
+  "id": "5918c329-d04f-42c1-a333-95e1e5083e4a",
+  "name": "对话_2025_5_24_14_35_17",
+  "created_at": "2025-05-24T14:35:20.448433",
+  "user_id": "user_2a5oi14",
+  "chat_history": [
+    {
+      "role": "user",
+      "content": "明天的明天这首歌是谁创作的"
+    },
+    {
+      "role": "assistant",
+      "content": "《明天的明天》是一首由台湾歌手张雨生演唱的歌曲，收录于他1994年的专辑《卡拉OK·台北·我》中。这首歌由张雨生本人作曲，歌词则由陈乐融创作。张雨生以其独特的嗓音和音乐才华在华语乐坛享有盛誉，而陈乐融则是台湾著名的词作家，两人合作创作了许多经典歌曲。"
+    },
+    {
+      "role": "user",
+      "content": "请推荐最近的新歌给我"
+    },
+    {
+      "role": "assistant",
+      "content": "最近有不少新歌值得一听，以下是一些2024年最新或热门的歌曲推荐，涵盖不同风格和语种：  \n\n### **华语流行**  \n1. **周杰伦《倒影》** – 周董的新单曲，延续他的经典风格，旋律抓耳。  \n2. **林俊杰《谢幕》** – JJ的深情演绎，适合喜欢抒情歌的听众。  \n3. **邓紫棋《天空没有极限》** – 励志风格，展现G.E.M.的高音爆发力。  \n4. **蔡徐坤《Hug Me (2024 Remix)》** – 全新混音版，节奏感更强。  \n5. **告五人《又到天黑》** – 独立乐队的温暖新作，适合夜晚聆听。  \n\n### **欧美流行**  \n1. **Taylor Swift – 《Fortnight (feat. Post Malone)》**（新专辑《The Tortured Poets Department》主打歌）  \n2. **Dua Lipa – 《Illusion》**（新专辑《Radical Optimism》中的热门单曲）  \n3. **Beyoncé – 《TEXAS HOLD 'EM》**（乡村风格新尝试，节奏轻快）  \n4. **Ariana Grande – 《yes, and?》**（回归单曲，舞曲风格）  \n5. **The Weeknd & Madonna – 《Popular》**（《偶像漩涡》原声带）  \n\n### **K-POP**  \n1. **LE SSERAFIM – 《Easy》**（酷飒女团新曲，节奏感强）  \n2. **IVE – 《HEYA》**（古风融合现代流行）  \n3. **NCT DREAM – 《Smoothie》**（活力满满的男团新歌）  \n4. **BTS 成员（如Jung Kook、V等）个人单曲**（关注成员solo作品）  \n\n### **其他推荐**  \n- **YOASOBI – 《HEART BEAT》**（日本超人气组合新曲）  \n- **Ed Sheeran – 《Lego House (2024 Acoustic)》**（经典重制版）  \n\n如果你有偏好的音乐风格或歌手，可以告诉我，我可以帮你推荐更符合你口味的歌曲！🎵"
+    }
+  ],
+  "user_profile": {
+    "明天的明天这首歌是谁创作的": 1,
+    "请推荐最近的新歌给我": 1
+  },
+  "knowledge_entities": [
+    "请推荐最近的新歌给我",
+    "明天的明天这首歌是谁创作的"
+  ]
+}

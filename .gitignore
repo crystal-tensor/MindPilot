@@ -5,40 +5,32 @@ __pycache__/
 *.so
 .Python
 env/
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-*.egg-info/
-.installed.cfg
-*.egg
-
-# Virtual Environment
 venv/
 ENV/
-.env
-
-# IDE files
-.idea/
-.vscode/
-*.swp
-*.swo
-
-# OS specific files
-.DS_Store
-Thumbs.db
+env.bak/
+venv.bak/
 
 # Flask
 instance/
 .webassets-cache
 
-# Generated files
-static/images/graphs/
+# 生成的图片文件（可选择是否包含）
+static/knowledge_graph_*.png
+static/thought_chain_*.png
+static/cognitive_map_*.png
+static/decision_model_*.png
+
+# 临时文件
+*.tmp
 *.log
+.DS_Store
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# 测试文件
+test_frontend.html
+test_features.py
