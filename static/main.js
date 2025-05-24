@@ -1312,7 +1312,7 @@ function loadSettings() {
         const settings = JSON.parse(savedSettings);
         
         if (modelProvider) modelProvider.value = settings.provider || 'deepseek';
-        if (apiKey) apiKey.value = settings.apiKey || 'sk-5c35391ff9f04c73a3ccafff36fed371';
+        if (apiKey) apiKey.value = settings.apiKey || '';
         if (modelName) modelName.value = settings.modelName || 'DeepSeek-R1';
         if (baseUrl) baseUrl.value = settings.baseUrl || 'https://api.deepseek.com/v1';
         if (temperature) temperature.value = settings.temperature || 0.7;
@@ -1343,7 +1343,7 @@ function loadSettings() {
         // 默认设置
         modelSettings = {
             provider: 'deepseek',
-            apiKey: 'sk-5c35391ff9f04c73a3ccafff36fed371',
+            apiKey: '',
             modelName: 'deepseek-chat',
             baseUrl: 'https://api.deepseek.com/v1',
             temperature: 0.7,
@@ -1360,7 +1360,7 @@ function loadSettings() {
 function getModelSettings() {
     return {
         provider: modelProvider?.value || 'deepseek',
-        apiKey: apiKey?.value || 'sk-5c35391ff9f04c73a3ccafff36fed371',
+        apiKey: apiKey?.value || '',
         modelName: modelName?.value || 'deepseek-chat',
         baseUrl: baseUrl?.value || 'https://api.deepseek.com/v1',
         temperature: temperature?.value || 0.7,

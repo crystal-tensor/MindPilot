@@ -34,3 +34,19 @@ static/decision_model_*.png
 # 测试文件
 test_frontend.html
 test_features.py
+test.py
+
+# 敏感信息
+.env
+.env.local
+.env.*.local
+config.py
+secrets.json
+api_keys.txt
+
+# 用户数据（可选择是否包含conversations）
+# conversations/
+
+# 备份文件
+*.bak
+*.backup
